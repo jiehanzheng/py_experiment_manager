@@ -165,6 +165,3 @@ if __name__ == "__main__":
       report[class_id] = {'f1': 2*(precision*recall)/(precision+recall), 'precision': precision, 'recall': recall}
     except ZeroDivisionError:
       report[class_id] = {'f1': "ZeroDivisionError", 'precision': precision, 'recall': recall}
-
-  with open('json_result', 'w') as json_result_file:
-    json_result_file.write(report)
