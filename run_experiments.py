@@ -1,12 +1,14 @@
 from __future__ import print_function
+import atexit
 import os
 import sys
 import re
 from server_adapters.localhost import LocalRunner
 from server_adapters.ssh import SSHRunner
-from collections import namedtuple
+from collections import namedtuple, defaultdict, Counter
 from multiprocessing import JoinableQueue, Process, Manager, log_to_stderr
 import logging
+from prettytable import PrettyTable
 
 
 Job = namedtuple('Job', ['directory', 'svm_params'])
@@ -32,6 +34,58 @@ def get_fold_numbers(folder_name):
     return [int(fold_number) for fold_number in fold_number_string.split('_')]
   else:
     return False
+
+
+def write_results_file(results):
+  with open('results', 'w') as results_file:
+    for job in results.keys():
+      results_file.write(repr(job) + '\n')
+      results_file.write("="*len(repr(job)) + '\n\n')
+      results_file.write(str(results[job]) + '\n')
+
+
+def print_table(results):
+  # build a list of all svm_params
+  # each being one table
+  results_tables = defaultdict(Counter)
+
+  # sum f1, precision, recall
+  for job in results.keys():
+    this_results_tables = results_tables[job.svm_params]
+
+    this_results_tables['num_exps'] += 1
+
+    if not ('status' in results[job] and results[job]['status'] == 'waiting'):
+      this_results_tables['num_completed_exps'] += 1
+
+      if 'classes' not in this_results_tables:
+        this_results_tables['classes'] = defaultdict(Counter)
+
+      # sum f1, precision and recall for each class
+      for class_id, stats in results[job].items():
+        for stats_type, stats_value in stats.items():
+          this_results_tables['classes'][class_id][stats_type] += stats_value
+
+  # divide by # of completed to get average
+  for experiment_result in results_tables.values():
+    for class_id, class_stats in experiment_result['classes'].items():
+      for stats_type, stats_value in class_stats.items():
+        experiment_result['classes'][class_id][stats_type] /= experiment_result['num_completed_exps']
+
+  print(results_tables)
+
+  # build tables
+  for table_name, result_table in results_tables.items():
+    pretty_table = PrettyTable(["Class", "F1", "Precision", "Recall"])
+    pretty_table.align["Fold #"] = 'l'
+
+    # TODO
+    for class_id, stats in result_table['classes'].items():
+      pretty_table.add_row([class_id, stats['f1'], stats['precision'], stats['recall']])
+
+    print(table_name)
+    print("="*len(table_name), end='\n\n')
+    print(pretty_table)
 
 
 if __name__ == "__main__":
@@ -73,6 +127,10 @@ if __name__ == "__main__":
   if len(svm_params_list) == 0:
     svm_params_list.append("")
 
+
+  manager = Manager()
+  results = manager.dict()
+
   # enqueue jobs
   job_queue = JoinableQueue()
   for svm_params in svm_params_list:
@@ -82,12 +140,11 @@ if __name__ == "__main__":
         with open(os.path.join(experiment_folder, 'svm_params'), 'w') as svm_params_file:
           svm_params_file.write(svm_params)
 
-      job_queue.put(Job(directory=experiment_folder, svm_params=svm_params))
-
+      job = Job(directory=experiment_folder, svm_params=svm_params)
+      job_queue.put(job)
+      results[job] = {'status': 'waiting'}
 
   # ask servers to grab jobs
-  manager = Manager()
-  results = manager.dict()
   for server in servers_list:
     t = Process(target=server.grab_jobs, args=(job_queue, results))
     t.daemon = True
@@ -95,10 +152,5 @@ if __name__ == "__main__":
 
   job_queue.join()
 
-
-  # process results
-  with open('results', 'w') as results_file:
-    for job in results.keys():
-      results_file.write(repr(job) + '\n')
-      results_file.write("="*len(repr(job)) + '\n\n')
-      results_file.write(results[job] + '\n')
+  write_results_file(results)
+  print_table(results)

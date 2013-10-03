@@ -63,6 +63,9 @@ if __name__ == "__main__":
   num_folds = int(sys.argv[2])
   assert num_folds > 0, "invalid num_folds"
 
+  if len(os.path.dirname(input_file_name)) > 0:
+    os.chdir(os.path.dirname(input_file_name))
+
   expected_folds_filename = os.path.basename(input_file_name) + '.' + str(num_folds) + '_folds'
 
   with open(input_file_name) as input_file:
@@ -134,6 +137,28 @@ if __name__ == "__main__":
           print("Copying", input_file.name, "to", test_file.name, file=sys.stderr)
           for input_line in input_file:
             test_file.write(input_line)
+
+    # create one-vs-all files
+    # TODO: implement pairwise
+    for class_id in range(1, num_classes + 1):
+      print("Producing", class_id, "vs all files...", file=sys.stderr)
+
+      with open(os.path.join(folder_name, 'train')) as train_file:
+        with open(os.path.join(folder_name, 'train.class_') + str(class_id), 'w') as train_class_file:
+          for train_line in train_file:
+            line_components = train_line.split(' ')
+            klass = int(line_components[0])
+
+            if klass == class_id:
+              klass = 1
+            else:
+              klass = -1
+
+            line_components[0] = str(klass)
+            train_class_file.write(' '.join(line_components))
+
+    # delete train_file because it's not useful anymore
+    os.remove(train_file.name)
 
   # remove fold files to save space
   for fold_id in range(1, num_folds + 1):

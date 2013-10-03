@@ -7,6 +7,7 @@ import os
 from multiprocessing import Pool, cpu_count
 import subprocess
 from collections import namedtuple, defaultdict, Counter
+import json
 
 
 Task = namedtuple('Task', ['train_filename', 'model_filename', 'prediction_filename', 'svm_params'])
@@ -21,14 +22,19 @@ def train_and_test(task):
   os.nice(19)
   print("Training", task.model_filename, "with params", task.svm_params + "...", file=sys.stderr)
   svm_learn_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["svm_learn", task.svm_params, task.train_filename, task.model_filename])], stdout=DEV_NULL, stderr=DEV_NULL)
-  atexit.register(svm_learn_process.terminate)
+  atexit.register(_kill, svm_learn_process)
   svm_learn_process.wait()
   print("Testing using", task.model_filename + "...", file=sys.stderr)
   svm_classify_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["svm_classify", 'test', task.model_filename, task.prediction_filename])], stdout=DEV_NULL, stderr=DEV_NULL)
-  atexit.register(svm_classify_process.terminate)
+  atexit.register(_kill, svm_classify_process)
   svm_classify_process.wait()
 
   return task.prediction_filename
+
+
+def _kill(process):
+  print("Killing", str(process) + '...')
+  os.kill(process.pid)
 
 
 def count_for_f1(tp, fp, fn, tn, prediction_file, test_file, classes):
@@ -57,38 +63,14 @@ if __name__ == "__main__":
     with open('svm_params') as svm_params_file:
       svm_params = svm_params_file.readline()
   else:
-    svm_params = ""    
+    svm_params = ""
 
   # find number of classes
   classes = set()
-  with open('train') as train_file:
-    for train_line in train_file:
-      actual_class = int(train_line.split(' ')[0])
+  with open('test') as test_file:
+    for test_line in test_file:
+      actual_class = int(test_line.split(' ')[0])
       classes.add(actual_class)
-
-  num_classes = len(classes)
-
-  # create one-vs-all files
-  # TODO: implement pairwise
-  for class_id in range(1, num_classes + 1):
-    print("Producing", class_id, "vs all file...", file=sys.stderr)
-
-    with open('train') as train_file:
-      with open('train.class_' + str(class_id), 'w') as train_class_file:
-        for train_line in train_file:
-          line_components = train_line.split(' ')
-          klass = int(line_components[0])
-
-          if klass == class_id:
-            klass = 1
-          else:
-            klass = -1
-
-          line_components[0] = str(klass)
-          train_class_file.write(' '.join(line_components))
-
-  # delete train_file because it's not useful anymore
-  os.remove(train_file.name)
 
   # find all train files and train N models with them
   queue = []
@@ -164,4 +146,6 @@ if __name__ == "__main__":
     try:
       report[class_id] = {'f1': 2*(precision*recall)/(precision+recall), 'precision': precision, 'recall': recall}
     except ZeroDivisionError:
-      report[class_id] = {'f1': "ZeroDivisionError", 'precision': precision, 'recall': recall}
+      report[class_id] = {'f1': 0, 'precision': precision, 'recall': recall}
+
+  print(json.dumps(report), end='')

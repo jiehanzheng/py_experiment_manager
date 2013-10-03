@@ -17,5 +17,5 @@ class Runner():
       job = queue.get()
       result = self.do_experiment(job.directory)
       self.logger.debug(str(job) + ': ' + str(result))
-      results[str(job)] = result
+      results[job] = result
       queue.task_done()

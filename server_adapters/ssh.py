@@ -8,6 +8,7 @@ import tarfile
 import subprocess
 import hashlib
 import logging
+import json
 
 
 class SSHRunner(Runner):
@@ -124,7 +125,7 @@ class SSHRunner(Runner):
 
   def do_experiment(self, folder_name):
     self._ensure_connected()
-    self.logger.info(self.hostname + " is working on " + folder_name + '...')
+    self.logger.info(self.hostname + " is assigned " + folder_name + '.')
 
     # copy folder over
     self._copy_to_server(folder_name)
@@ -141,7 +142,7 @@ class SSHRunner(Runner):
 
     self._cleanup(folder_name)
 
-    return json_result
+    return json.loads(json_result)
 
   def _copy_to_server(self, filename, destination=None):
     self._ensure_connected()
