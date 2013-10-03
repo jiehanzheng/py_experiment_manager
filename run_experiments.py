@@ -95,8 +95,6 @@ if __name__ == "__main__":
 
   job_queue.join()
 
-  print(len(results))
-  print(results)
 
   # process results
   with open('results', 'w') as results_file:

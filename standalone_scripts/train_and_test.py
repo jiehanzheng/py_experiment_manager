@@ -166,5 +166,5 @@ if __name__ == "__main__":
     except ZeroDivisionError:
       report[class_id] = {'f1': "ZeroDivisionError", 'precision': precision, 'recall': recall}
 
-  with open('json_result') as json_result_file:
+  with open('json_result', 'w') as json_result_file:
     json_result.write(report)
