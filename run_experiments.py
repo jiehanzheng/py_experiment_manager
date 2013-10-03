@@ -5,7 +5,8 @@ import re
 from server_adapters.localhost import LocalRunner
 from server_adapters.ssh import SSHRunner
 from collections import namedtuple
-from multiprocessing import Queue, Process
+from multiprocessing import JoinableQueue, Process, Manager, log_to_stderr
+import logging
 
 
 Job = namedtuple('Job', ['directory', 'svm_params'])
@@ -43,6 +44,10 @@ if __name__ == "__main__":
       print("Using fold combination:", filename, get_fold_numbers(filename), file=sys.stderr)
       experiment_folders.append(filename)
   
+
+  logger = log_to_stderr()
+  logger.setLevel(logging.INFO)
+
   # read available server lists
   servers_list = []
   with open("servers_list") as servers_file:
@@ -57,7 +62,7 @@ if __name__ == "__main__":
         servers_list.append(LocalRunner(directory))
       else:
         username, hostname = hostname.split('@')
-        servers_list.append(SSHRunner(username, hostname, directory))
+        servers_list.append(SSHRunner(username, hostname, directory, logger=logger))
 
   # read svm params list
   svm_params_list = []
@@ -69,7 +74,7 @@ if __name__ == "__main__":
     svm_params_list.append("")
 
   # enqueue jobs
-  job_queue = Queue()
+  job_queue = JoinableQueue()
   for svm_params in svm_params_list:
     for experiment_folder in experiment_folders:
       # create svm_params file
@@ -79,18 +84,23 @@ if __name__ == "__main__":
 
       job_queue.put(Job(directory=experiment_folder, svm_params=svm_params))
 
+
   # ask servers to grab jobs
-  results = dict()
+  manager = Manager()
+  results = manager.dict()
   for server in servers_list:
-    t = Process(target=server.grab_jobs(job_queue, results))
+    t = Process(target=server.grab_jobs, args=(job_queue, results))
     t.daemon = True
     t.start()
 
   job_queue.join()
 
+  print(len(results))
+  print(results)
+
   # process results
-  with open('results') as results_file:
-    for job, result_json in results.iteritems():
+  with open('results', 'w') as results_file:
+    for job in results.keys():
       results_file.write(repr(job) + '\n')
-      results_file.write(len(repr(job)) + '\n\n')
-      results_file.write(result_json + '\n')
+      results_file.write("="*len(repr(job)) + '\n\n')
+      results_file.write(results[job] + '\n')

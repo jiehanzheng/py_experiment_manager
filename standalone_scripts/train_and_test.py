@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
 from __future__ import print_function, division
+import atexit
 import sys
 import os
 from multiprocessing import Pool, cpu_count
@@ -10,7 +11,7 @@ from collections import namedtuple, defaultdict, Counter
 
 Task = namedtuple('Task', ['train_filename', 'model_filename', 'prediction_filename', 'svm_params'])
 SVMReport = namedtuple('SVMReport', ['prediction_filename', 'time_train', 'time_test'])
-# DEV_NULL = open(os.devnull, 'w')
+DEV_NULL = open(os.devnull, 'w')
 
 
 def train_and_test(task):
@@ -19,9 +20,14 @@ def train_and_test(task):
 
   os.nice(19)
   print("Training", task.model_filename, "with params", task.svm_params + "...", file=sys.stderr)
-  subprocess.call(['/bin/bash', '-c', ' '.join(["svm_learn", task.svm_params, task.train_filename, task.model_filename])])
-  print("Testing using", task.model_filename + "...")
-  subprocess.call(['/bin/bash', '-c', ' '.join(["svm_classify", 'test', task.model_filename, task.prediction_filename])])
+  svm_learn_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["svm_learn", task.svm_params, task.train_filename, task.model_filename])], stdout=DEV_NULL, stderr=DEV_NULL)
+  atexit.register(svm_learn_process.terminate)
+  svm_learn_process.wait()
+  print("Testing using", task.model_filename + "...", file=sys.stderr)
+  svm_classify_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["svm_classify", 'test', task.model_filename, task.prediction_filename])], stdout=DEV_NULL, stderr=DEV_NULL)
+  atexit.register(svm_classify_process.terminate)
+  svm_classify_process.wait()
+
   return task.prediction_filename
 
 
@@ -155,6 +161,10 @@ if __name__ == "__main__":
   for class_id in classes:
     precision = tp[class_id]/(tp[class_id]+fp[class_id])
     recall = tp[class_id]/(tp[class_id]+fn[class_id])
-    report[class_id] = {'f1': 2*(precision*recall)/(precision+recall), 'precision': precision, 'recall': recall}
+    try:
+      report[class_id] = {'f1': 2*(precision*recall)/(precision+recall), 'precision': precision, 'recall': recall}
+    except ZeroDivisionError:
+      report[class_id] = {'f1': "ZeroDivisionError", 'precision': precision, 'recall': recall}
 
-  print(report)
+  with open('json_result') as json_result_file:
+    json_result.write(report)

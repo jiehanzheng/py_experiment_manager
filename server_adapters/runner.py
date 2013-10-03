@@ -1,8 +1,11 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 class Runner():
   __metaclass__ = ABCMeta
-  
+
+  @abstractproperty
+  def logger(self): pass
+
   @abstractmethod
   def do_experiment(self, folder_name): pass
 
@@ -11,8 +14,8 @@ class Runner():
 
   def grab_jobs(self, queue, results):
     while True:
-      directory = queue.get().directory
-      result = self.do_experiment(directory)
-      results.append(result)
-      self._cleanup()
+      job = queue.get()
+      result = self.do_experiment(job.directory)
+      self.logger.debug(str(job) + ': ' + str(result))
+      results[str(job)] = result
       queue.task_done()

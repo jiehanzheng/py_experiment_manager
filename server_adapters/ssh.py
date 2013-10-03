@@ -7,24 +7,32 @@ import os
 import tarfile
 import subprocess
 import hashlib
+import logging
 
 
 class SSHRunner(Runner):
 
   environment_variables = set()
   ssh = None
+  ssh_closed = True
   bin_path = ""
 
-  def __init__(self, username, hostname, working_directory):
+  def __init__(self, username, hostname, working_directory, logger=None):
     self.username = username
     self.hostname = hostname
 
-    print("Connecting to", username + "@" + hostname + "...", file=sys.stderr)
+    if logger is None:
+      self.logger = logging.getLogger()
+    else:
+      self.logger = logger
+
+    self.logger.info("Connecting to " + username + "@" + hostname + "...")
 
     # try connecting to it
     self.ssh = SSHClient()
     self.ssh.load_system_host_keys()
     self.ssh.connect(hostname, username=username)
+    self.ssh_closed = False
 
     _, home, _ = self.ssh.exec_command("pwd")
     home = home.read().strip()
@@ -42,9 +50,9 @@ class SSHRunner(Runner):
     svmlearn_location = svmlearn_location.read().strip()
 
     if len(svmlearn_location) > 0:
-      print(hostname, "has SVMLight installed at", svmlearn_location, file=sys.stderr)
+      self.logger.info(hostname + " has SVMLight installed at " + svmlearn_location)
     else:
-      print(hostname, "does not have SVMLight installed.  Attempting to install one...", file=sys.stderr)
+      self.logger.warning(hostname + " does not have SVMLight installed.  Attempting to install one...")
       
       self._run_command("mkdir -p " + self.bin_path)
 
@@ -76,43 +84,68 @@ class SSHRunner(Runner):
 
       if remote_script_md5 == local_script_md5:
         install_helper_script = False
-        print(hostname, "'s helper script at", script_location, "is up-to-date.", file=sys.stderr)
+        self.logger.info(hostname + "'s helper script at " + script_location + " is up-to-date.")
       else:
         install_helper_script = True
-        print(hostname + "'s copy of helper script is out-of-date (remote=" + remote_script_md5 + ', local=' + local_script_md5 + ')', file=sys.stderr)
+        self.logger.info(hostname + "'s copy of helper script is out-of-date (remote=" + remote_script_md5 + ', local=' + local_script_md5 + ')')
     else:
-      print(hostname, "does not have helper script installed.", file=sys.stderr)
+      self.logger.info(hostname + " does not have helper script installed.")
 
     if install_helper_script:
-      print("Copying helper script to", hostname, file=sys.stderr)
+      self.logger.info("Copying helper script to " + hostname + '...')
       self._copy_to_server(local_script_location, self.bin_path)
       self._run_command("chmod u+x " + quote(self.bin_path) + '/train_and_test.py')
 
     # create working directory
     self._run_command("mkdir " + working_directory)
 
+    self.ssh.close()
+    self.ssh_closed = True
+
+
+  def logger(self):
+    return logger
+
+  def _ensure_connected(self):
+    if self.ssh_closed:
+      self.ssh = SSHClient()
+      self.ssh.load_system_host_keys()
+      self.ssh.connect(self.hostname, username=self.username)
+      self.ssh_closed = False
+
 
   def _run_command(self, command):
+    self._ensure_connected()
     if self.environment_variables is not None:
       command = '; '.join(['export ' + e[0] + '=' + e[1] for e in self.environment_variables]) + '; ' + command
 
+    self.logger.debug("SSH: " + command)
     return self.ssh.exec_command(command)
 
   def do_experiment(self, folder_name):
-    print(self.hostname, "is working on", folder_name + '...', file=sys.stderr)
+    self._ensure_connected()
+    self.logger.info(self.hostname + " is working on " + folder_name + '...')
 
     # copy folder over
     self._copy_to_server(folder_name)
+
+    self.logger.info(self.hostname + " is training on " + folder_name + '...')
     _, stdout, stderr = self._run_command('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py')
 
     json_result = stdout.read()
 
     if len(json_result) == 0:
-      raise RuntimeError("Unexpected output from remote server.  STDERR:\n" + stderr.read())
+      error_message = "Unexpected output from remote server.  STDERR:\n" + stderr.read()
+      self.logger.critical(error_message)
+      raise RuntimeError(error_message)
+
+    self._cleanup(folder_name)
 
     return json_result
 
   def _copy_to_server(self, filename, destination=None):
+    self._ensure_connected()
+
     if destination is None:
       destination = self.working_directory
 
@@ -124,10 +157,10 @@ class SSHRunner(Runner):
     elif os.path.isdir(filename):
       tar_filename = filename + '.tar.gz'
 
-      print("Compressing", filename + '...', file=sys.stderr)
+      self.logger.info("Compressing " + filename + '...')
       subprocess.call(['tar', 'cfz', tar_filename, filename])
 
-      print("Copying", tar_filename, "to", self.hostname + ':' + os.path.join(destination, os.path.basename(tar_filename)))
+      self.logger.info("Copying " + tar_filename + " to " + self.hostname + ':' + os.path.join(destination, os.path.basename(tar_filename)) + '...')
       sftp.put(tar_filename, os.path.join(destination, os.path.basename(tar_filename)))
       os.remove(tar_filename)
 
@@ -137,5 +170,6 @@ class SSHRunner(Runner):
 
     sftp.close()
 
-  def _cleanup():
-    self._run_command("rm -rf " + quote(working_directory))
+  def _cleanup(self, folder_name=''):
+    self._ensure_connected()
+    self._run_command("rm -rf " + quote(self.working_directory) + '/' + quote(folder_name))
