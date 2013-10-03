@@ -167,4 +167,4 @@ if __name__ == "__main__":
       report[class_id] = {'f1': "ZeroDivisionError", 'precision': precision, 'recall': recall}
 
   with open('json_result', 'w') as json_result_file:
-    json_result.write(report)
+    json_result_file.write(report)
