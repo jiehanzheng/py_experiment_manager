@@ -4,8 +4,15 @@ class Runner():
   __metaclass__ = ABCMeta
   
   @abstractmethod
-  def _do_experiment(self, folder_name): pass
+  def do_experiment(self, folder_name): pass
 
-  def grab_jobs(self, queue):
-    self._do_experiment(queue.get().directory)
-    queue.task_done()
+  @abstractmethod
+  def _cleanup(self): pass
+
+  def grab_jobs(self, queue, results):
+    while True:
+      directory = queue.get().directory
+      result = self.do_experiment(directory)
+      results.append(result)
+      self._cleanup()
+      queue.task_done()

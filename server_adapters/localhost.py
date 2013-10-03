@@ -6,10 +6,10 @@ import os
 class LocalRunner(Runner):
 
   def __init__(self, working_directory):
-    self.working_directory = working_directory
-
-    print("Preparing localhost...", file=sys.stderr)
     raise NotImplementedError()
 
-  def _do_experiment(self, folder_name):
+  def do_experiment(self, folder_name):
+    raise NotImplementedError()
+
+  def _cleanup():
     raise NotImplementedError()

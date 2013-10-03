@@ -8,7 +8,7 @@ from collections import namedtuple
 from multiprocessing import Queue, Process
 
 
-Job = namedtuple('Job', ['directory'])
+Job = namedtuple('Job', ['directory', 'svm_params'])
 
 
 folder_name_pattern = re.compile(r'_model(?P<fold_numbers>(?:_\d+)+)$')
@@ -31,10 +31,6 @@ def get_fold_numbers(folder_name):
     return [int(fold_number) for fold_number in fold_number_string.split('_')]
   else:
     return False
-
-
-def start_experiment(experiment):
-  experiment.server.do_experiment(experiment.directory)
 
 
 if __name__ == "__main__":
@@ -63,11 +59,38 @@ if __name__ == "__main__":
         username, hostname = hostname.split('@')
         servers_list.append(SSHRunner(username, hostname, directory))
 
+  # read svm params list
+  svm_params_list = []
+  if os.path.exists('svm_params'):
+    with open('svm_params') as svm_params_file:
+      svm_params_list = [line.strip() for line in svm_params_file.readlines()]
+
+  if len(svm_params_list) == 0:
+    svm_params_list.append("")
+
   # enqueue jobs
   job_queue = Queue()
-  for experiment_folder in experiment_folders:
-    job_queue.put(Job(directory=experiment_folder))
+  for svm_params in svm_params_list:
+    for experiment_folder in experiment_folders:
+      # create svm_params file
+      if len(svm_params) > 0:
+        with open(os.path.join(experiment_folder, 'svm_params'), 'w') as svm_params_file:
+          svm_params_file.write(svm_params)
+
+      job_queue.put(Job(directory=experiment_folder, svm_params=svm_params))
 
   # ask servers to grab jobs
+  results = dict()
   for server in servers_list:
-    server.grab_jobs(job_queue)
+    t = Process(target=server.grab_jobs(job_queue, results))
+    t.daemon = True
+    t.start()
+
+  job_queue.join()
+
+  # process results
+  with open('results') as results_file:
+    for job, result_json in results.iteritems():
+      results_file.write(repr(job) + '\n')
+      results_file.write(len(repr(job)) + '\n\n')
+      results_file.write(result_json + '\n')

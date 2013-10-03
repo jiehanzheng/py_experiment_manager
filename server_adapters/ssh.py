@@ -6,6 +6,7 @@ import sys
 import os
 import tarfile
 import subprocess
+import hashlib
 
 
 class SSHRunner(Runner):
@@ -48,24 +49,44 @@ class SSHRunner(Runner):
       self._run_command("mkdir -p " + self.bin_path)
 
       # download and install SVMLight to home bin
-      self._run_command("mkdir -p /tmp/py_experiment_manager")
-      self._run_command("wget -O /tmp/py_experiment_manager/svmlight.tgz http://download.joachims.org/svm_light/current/svm_light_linux64.tar.gz")
-      self._run_command("mkdir -p /tmp/py_experiment_manager/svmlight")
-      self._run_command("tar xfz /tmp/py_experiment_manager/svmlight.tgz -C /tmp/py_experiment_manager/svmlight")
-      self._run_command("mv /tmp/py_experiment_manager/svmlight/svm_learn /tmp/py_experiment_manager/svmlight/svm_classify " + self.bin_path)
-      self._run_command("rm -rf /tmp/py_experiment_manager/")
+      # self._run_command("mkdir -p /tmp/py_experiment_manager")
+      # self._run_command("wget -O /tmp/py_experiment_manager/svmlight.tgz http://download.joachims.org/svm_light/current/svm_light_linux64.tar.gz")
+      # self._run_command("mkdir -p /tmp/py_experiment_manager/svmlight")
+      # self._run_command("tar xfz /tmp/py_experiment_manager/svmlight.tgz -C /tmp/py_experiment_manager/svmlight")
+      # self._run_command("mv /tmp/py_experiment_manager/svmlight/svm_learn /tmp/py_experiment_manager/svmlight/svm_classify " + self.bin_path)
+      # self._run_command("rm -rf /tmp/py_experiment_manager/")
+      self._run_command('wget -O ' + quote(self.bin_path) + '/svm_learn ' + 'https://static.jiehan.org/pub/svm_light/svm_learn')
+      self._run_command('wget -O ' + quote(self.bin_path) + '/svm_classify ' + 'https://static.jiehan.org/pub/svm_light/svm_classify')
+      self._run_command("chmod u+x " + quote(self.bin_path) + '/svm_learn')
+      self._run_command("chmod u+x " + quote(self.bin_path) + '/svm_classify')
 
     # check if our server-side script is installed
+    install_helper_script = True
+
+    local_script_location = os.path.join(os.path.dirname(__file__), '../standalone_scripts/train_and_test.py')
+
     _, script_location, _ = self._run_command("which train_and_test.py")
     script_location = script_location.read().strip()
 
     if len(script_location) > 0:
-      print(hostname, "has helper script installed at", script_location, file=sys.stderr)
-    else:
-      print(hostname, "does not have helper script installed.  Attempting to install one...", script_location, file=sys.stderr)
+      # check version
+      _, script_md5_line, _ = self._run_command("md5sum " + quote(script_location))
+      remote_script_md5, _ = script_md5_line.read().strip().split()[:2]
+      local_script_md5 = hashlib.md5(open(local_script_location, 'rb').read()).hexdigest()
 
-      self._copy_to_server(os.path.join(os.path.dirname(__file__), '../standalone_scripts/train_and_test.py'), self.bin_path)
-      self._run_command("chmod u+x " + self.bin_path + '/train_and_test.py')
+      if remote_script_md5 == local_script_md5:
+        install_helper_script = False
+        print(hostname, "'s helper script at", script_location, "is up-to-date.", file=sys.stderr)
+      else:
+        install_helper_script = True
+        print(hostname + "'s copy of helper script is out-of-date (remote=" + remote_script_md5 + ', local=' + local_script_md5 + ')', file=sys.stderr)
+    else:
+      print(hostname, "does not have helper script installed.", file=sys.stderr)
+
+    if install_helper_script:
+      print("Copying helper script to", hostname, file=sys.stderr)
+      self._copy_to_server(local_script_location, self.bin_path)
+      self._run_command("chmod u+x " + quote(self.bin_path) + '/train_and_test.py')
 
     # create working directory
     self._run_command("mkdir " + working_directory)
@@ -77,12 +98,12 @@ class SSHRunner(Runner):
 
     return self.ssh.exec_command(command)
 
-  def _do_experiment(self, folder_name):
+  def do_experiment(self, folder_name):
     print(self.hostname, "is working on", folder_name + '...', file=sys.stderr)
 
     # copy folder over
     self._copy_to_server(folder_name)
-    _, stdout, stderr = self._run_command('cd ' + self.working_directory + '; ' + 'train_and_test.py ' + folder_name + ' ' + '8')
+    _, stdout, stderr = self._run_command('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py')
 
     json_result = stdout.read()
 
@@ -112,6 +133,9 @@ class SSHRunner(Runner):
 
       self._run_command('cd ' + self.working_directory + '; tar xfz ' + tar_filename)
     else:
-      raise NotImplementedError("Can't SFTP put anything other than a folder or file.")
+      raise NotImplementedError("Can't SFTP put anything other than a folder or file yet.")
 
     sftp.close()
+
+  def _cleanup():
+    self._run_command("rm -rf " + quote(working_directory))

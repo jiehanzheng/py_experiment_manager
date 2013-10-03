@@ -3,7 +3,7 @@
 from __future__ import print_function, division
 import sys
 import os
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import subprocess
 from collections import namedtuple, defaultdict, Counter
 
@@ -45,9 +45,44 @@ def count_for_f1(tp, fp, fn, tn, prediction_file, test_file, classes):
 
 
 if __name__ == "__main__":
-  os.chdir(sys.argv[1])
-  num_threads = int(sys.argv[2])
-  svm_params = sys.argv[3] if len(sys.argv) >= 4 else ""
+  num_threads = cpu_count()
+
+  if os.path.exists('svm_params'):
+    with open('svm_params') as svm_params_file:
+      svm_params = svm_params_file.readline()
+  else:
+    svm_params = ""    
+
+  # find number of classes
+  classes = set()
+  with open('train') as train_file:
+    for train_line in train_file:
+      actual_class = int(train_line.split(' ')[0])
+      classes.add(actual_class)
+
+  num_classes = len(classes)
+
+  # create one-vs-all files
+  # TODO: implement pairwise
+  for class_id in range(1, num_classes + 1):
+    print("Producing", class_id, "vs all file...", file=sys.stderr)
+
+    with open('train') as train_file:
+      with open('train.class_' + str(class_id), 'w') as train_class_file:
+        for train_line in train_file:
+          line_components = train_line.split(' ')
+          klass = int(line_components[0])
+
+          if klass == class_id:
+            klass = 1
+          else:
+            klass = -1
+
+          line_components[0] = str(klass)
+          train_class_file.write(' '.join(line_components))
+
+  # delete train_file because it's not useful anymore
+  os.remove(train_file.name)
 
   # find all train files and train N models with them
   queue = []
@@ -108,12 +143,6 @@ if __name__ == "__main__":
     prediction_file.close()
 
   # calculate f-measure and stuff
-  classes = set()
-  with open('test') as test_file:
-    for test_line in test_file:
-      actual_class = int(test_line.split(' ')[0])
-      classes.add(actual_class)
-
   tp = Counter()
   fp = Counter()
   fn = Counter()
