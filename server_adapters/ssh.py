@@ -129,7 +129,7 @@ class SSHRunner(Runner):
     self._copy_to_server(folder_name)
 
     self.logger.info(self.hostname + " is training on " + folder_name + '...')
-    _, stdout, stderr = self._run_command('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py ' + quote(svm_params))
+    _, stdout, stderr = self._run_command('/bin/bash -c ' + quote('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py ' + quote(svm_params)))
 
     json_result = stdout.read()
 
