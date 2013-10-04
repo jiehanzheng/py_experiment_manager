@@ -128,8 +128,9 @@ class SSHRunner(Runner):
     # copy folder over
     self._copy_to_server(folder_name)
 
+    # the "python `which ...`" thing is a workaround to avoid using Columbia's old Python
     self.logger.info(self.hostname + " is training on " + folder_name + '...')
-    _, stdout, stderr = self._run_command('/bin/bash -c ' + quote('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py ' + quote(svm_params)))
+    _, stdout, stderr = self._run_command('/bin/bash -c ' + quote('cd ' + self.working_directory + '/' + folder_name + '; ' + 'python `which train_and_test.py` ' + quote(svm_params)))
 
     json_result = stdout.read()
 
