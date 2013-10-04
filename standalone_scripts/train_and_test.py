@@ -58,12 +58,7 @@ def count_for_f1(tp, fp, fn, tn, prediction_file, test_file, classes):
 
 if __name__ == "__main__":
   num_threads = cpu_count()
-
-  if os.path.exists('svm_params'):
-    with open('svm_params') as svm_params_file:
-      svm_params = svm_params_file.readline()
-  else:
-    svm_params = ""
+  svm_params = sys.argv[1]
 
   # find number of classes
   classes = set()
@@ -146,6 +141,6 @@ if __name__ == "__main__":
     try:
       report[class_id] = {'f1': 2*(precision*recall)/(precision+recall), 'precision': precision, 'recall': recall}
     except ZeroDivisionError:
-      report[class_id] = {'f1': 0, 'precision': precision, 'recall': recall}
+      report[class_id] = {'f1': 0.0, 'precision': precision, 'recall': recall}
 
   print(json.dumps(report), end='')

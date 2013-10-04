@@ -15,7 +15,7 @@ class Runner():
   def grab_jobs(self, queue, results):
     while True:
       job = queue.get()
-      result = self.do_experiment(job.directory)
+      result = self.do_experiment(job.directory, job.svm_params)
       self.logger.debug(str(job) + ': ' + str(result))
       results[job] = result
       queue.task_done()

@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, division
 import atexit
 import os
 import sys
@@ -41,7 +41,7 @@ def write_results_file(results):
     for job in results.keys():
       results_file.write(repr(job) + '\n')
       results_file.write("="*len(repr(job)) + '\n\n')
-      results_file.write(str(results[job]) + '\n')
+      results_file.write(str(results[job]) + '\n\n')
 
 
 def print_table(results):
@@ -51,41 +51,41 @@ def print_table(results):
 
   # sum f1, precision, recall
   for job in results.keys():
-    this_results_tables = results_tables[job.svm_params]
+    this_results_table = results_tables[job.svm_params]
 
-    this_results_tables['num_exps'] += 1
+    if 'classes' not in this_results_table:
+      this_results_table['classes'] = defaultdict(Counter)
+
+    this_results_table['num_exps'] += 1
 
     if not ('status' in results[job] and results[job]['status'] == 'waiting'):
-      this_results_tables['num_completed_exps'] += 1
-
-      if 'classes' not in this_results_tables:
-        this_results_tables['classes'] = defaultdict(Counter)
+      this_results_table['num_completed_exps'] += 1
 
       # sum f1, precision and recall for each class
       for class_id, stats in results[job].items():
         for stats_type, stats_value in stats.items():
-          this_results_tables['classes'][class_id][stats_type] += stats_value
+          this_results_table['classes'][class_id][stats_type] += stats_value
 
   # divide by # of completed to get average
-  for experiment_result in results_tables.values():
+  for experiment_name in results_tables.keys():
+    experiment_result = results_tables[experiment_name]
     for class_id, class_stats in experiment_result['classes'].items():
       for stats_type, stats_value in class_stats.items():
         experiment_result['classes'][class_id][stats_type] /= experiment_result['num_completed_exps']
 
-  print(results_tables)
+  # TODO: sorting by class
+  # TODO: stdev
 
   # build tables
   for table_name, result_table in results_tables.items():
     pretty_table = PrettyTable(["Class", "F1", "Precision", "Recall"])
-    pretty_table.align["Fold #"] = 'l'
 
-    # TODO
     for class_id, stats in result_table['classes'].items():
       pretty_table.add_row([class_id, stats['f1'], stats['precision'], stats['recall']])
 
     print(table_name)
     print("="*len(table_name), end='\n\n')
-    print(pretty_table)
+    print(pretty_table, end='\n\n')
 
 
 if __name__ == "__main__":
@@ -100,7 +100,7 @@ if __name__ == "__main__":
   
 
   logger = log_to_stderr()
-  logger.setLevel(logging.INFO)
+  logger.setLevel(logging.DEBUG)
 
   # read available server lists
   servers_list = []
@@ -135,11 +135,6 @@ if __name__ == "__main__":
   job_queue = JoinableQueue()
   for svm_params in svm_params_list:
     for experiment_folder in experiment_folders:
-      # create svm_params file
-      if len(svm_params) > 0:
-        with open(os.path.join(experiment_folder, 'svm_params'), 'w') as svm_params_file:
-          svm_params_file.write(svm_params)
-
       job = Job(directory=experiment_folder, svm_params=svm_params)
       job_queue.put(job)
       results[job] = {'status': 'waiting'}

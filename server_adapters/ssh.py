@@ -9,6 +9,7 @@ import subprocess
 import hashlib
 import logging
 import json
+import uuid
 
 
 class SSHRunner(Runner):
@@ -123,7 +124,10 @@ class SSHRunner(Runner):
     self.logger.debug("SSH: " + command)
     return self.ssh.exec_command(command)
 
-  def do_experiment(self, folder_name):
+  def do_experiment(self, folder_name, svm_params=None):
+    if svm_params is None:
+      svm_params = ""
+
     self._ensure_connected()
     self.logger.info(self.hostname + " is assigned " + folder_name + '.')
 
@@ -131,7 +135,7 @@ class SSHRunner(Runner):
     self._copy_to_server(folder_name)
 
     self.logger.info(self.hostname + " is training on " + folder_name + '...')
-    _, stdout, stderr = self._run_command('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py')
+    _, stdout, stderr = self._run_command('cd ' + self.working_directory + '/' + folder_name + '; ' + 'train_and_test.py ' + quote(svm_params))
 
     json_result = stdout.read()
 
@@ -140,9 +144,12 @@ class SSHRunner(Runner):
       self.logger.critical(error_message)
       raise RuntimeError(error_message)
 
-    self._cleanup(folder_name)
+    # self._cleanup(folder_name)
 
-    return json.loads(json_result)
+    try:
+      return json.loads(json_result)
+    except ValueError:
+      raise RuntimeError("Unable to parse STDOUT with JSON parser:\n" + json_result)
 
   def _copy_to_server(self, filename, destination=None):
     self._ensure_connected()
@@ -156,7 +163,7 @@ class SSHRunner(Runner):
     if os.path.isfile(filename):
       sftp.put(filename, os.path.join(destination, os.path.basename(filename)))
     elif os.path.isdir(filename):
-      tar_filename = filename + '.tar.gz'
+      tar_filename = filename + '_' + str(uuid.uuid4()) + '.tar.gz'
 
       self.logger.info("Compressing " + filename + '...')
       subprocess.call(['tar', 'cfz', tar_filename, filename])
