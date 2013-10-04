@@ -87,7 +87,7 @@ class SSHRunner(Runner):
     if install_helper_script:
       self.logger.info("Copying helper script to " + hostname + '...')
       self._copy_to_server(local_script_location, self.bin_path)
-      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, '/train_and_test.py')))
+      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'train_and_test.py')))
 
     # create working directory
     self._run_command("rm -rf " + quote(self.working_directory))
