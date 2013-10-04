@@ -91,8 +91,8 @@ class SSHRunner(Runner):
 
     # create working directory
     _, stdout, stderr = self._run_command("rm -rf " + quote(self.working_directory) + " && mkdir -p " + quote(self.working_directory))
-    self.logger.debug("create working directory STDOUT: " + stdout)
-    self.logger.debug("create working directory STDERR: " + stderr)
+    self.logger.debug("create working directory STDOUT: " + stdout.read())
+    self.logger.debug("create working directory STDERR: " + stderr.read())
 
     self.ssh.close()
     self.ssh_closed = True
