@@ -170,7 +170,7 @@ class SSHRunner(Runner):
       sftp.put(tar_filename, os.path.join(destination, os.path.basename(tar_filename)))
       os.remove(tar_filename)
 
-      self._run_command('cd ' + self.working_directory + '; tar xfz ' + quote(tar_filename) + '; rm ' + quote(tar_filename))
+      _, stdout, stderr = self._run_command('cd ' + quote(self.working_directory) + ' && tar xvfz ' + quote(tar_filename) + ' && rm ' + quote(tar_filename))
     else:
       raise NotImplementedError("Can't SFTP put anything other than a folder or file yet.")
 
