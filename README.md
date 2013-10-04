@@ -1,6 +1,14 @@
 Python SVM experiment manager
 =============================
 
+Installation
+------------
+
+```
+pip install paramiko
+pip install prettytable
+```
+
 Usage
 -----
 

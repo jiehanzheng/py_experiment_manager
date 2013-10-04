@@ -33,6 +33,7 @@ class SSHRunner(Runner):
     # try connecting to it
     self.ssh = SSHClient()
     self.ssh.load_system_host_keys()
+    self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     self.ssh.connect(hostname, username=username)
     self.ssh_closed = False
 
