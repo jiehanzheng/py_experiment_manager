@@ -90,8 +90,7 @@ class SSHRunner(Runner):
       self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'train_and_test.py')))
 
     # create working directory
-    self._run_command("rm -rf " + quote(self.working_directory))
-    self._run_command("mkdir " + quote(self.working_directory))
+    self._run_command("rm -rf " + quote(self.working_directory) + " && mkdir -p " + quote(self.working_directory))
 
     self.ssh.close()
     self.ssh_closed = True
