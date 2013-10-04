@@ -100,7 +100,7 @@ if __name__ == "__main__":
   
 
   logger = log_to_stderr()
-  logger.setLevel(logging.DEBUG)
+  logger.setLevel(logging.INFO)
 
   # read available server lists
   servers_list = []

@@ -38,7 +38,7 @@ class SSHRunner(Runner):
 
     _, home, _ = self.ssh.exec_command("pwd")
     home = home.read().strip()
-    self.bin_path = quote(home) + '/bin'
+    self.bin_path = os.path.join(home, 'bin')
     self.working_directory = working_directory.replace('~', home)
 
     # add ~/bin to path if it is not already there
@@ -59,16 +59,10 @@ class SSHRunner(Runner):
       self._run_command("mkdir -p " + self.bin_path)
 
       # download and install SVMLight to home bin
-      # self._run_command("mkdir -p /tmp/py_experiment_manager")
-      # self._run_command("wget -O /tmp/py_experiment_manager/svmlight.tgz http://download.joachims.org/svm_light/current/svm_light_linux64.tar.gz")
-      # self._run_command("mkdir -p /tmp/py_experiment_manager/svmlight")
-      # self._run_command("tar xfz /tmp/py_experiment_manager/svmlight.tgz -C /tmp/py_experiment_manager/svmlight")
-      # self._run_command("mv /tmp/py_experiment_manager/svmlight/svm_learn /tmp/py_experiment_manager/svmlight/svm_classify " + self.bin_path)
-      # self._run_command("rm -rf /tmp/py_experiment_manager/")
-      self._run_command('wget -O ' + quote(self.bin_path) + '/svm_learn ' + 'https://static.jiehan.org/pub/svm_light/svm_learn')
-      self._run_command('wget -O ' + quote(self.bin_path) + '/svm_classify ' + 'https://static.jiehan.org/pub/svm_light/svm_classify')
-      self._run_command("chmod u+x " + quote(self.bin_path) + '/svm_learn')
-      self._run_command("chmod u+x " + quote(self.bin_path) + '/svm_classify')
+      self._run_command('wget -O ' + quote(os.path.join(self.bin_path, 'svm_learn')) + 'https://static.jiehan.org/pub/svm_light/svm_learn')
+      self._run_command('wget -O ' + quote(os.path.join(self.bin_path, 'svm_classify')) + 'https://static.jiehan.org/pub/svm_light/svm_classify')
+      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'svm_learn')))
+      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'svm_classify')))
 
     # check if our server-side script is installed
     install_helper_script = True
@@ -96,10 +90,11 @@ class SSHRunner(Runner):
     if install_helper_script:
       self.logger.info("Copying helper script to " + hostname + '...')
       self._copy_to_server(local_script_location, self.bin_path)
-      self._run_command("chmod u+x " + quote(self.bin_path) + '/train_and_test.py')
+      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, '/train_and_test.py')))
 
     # create working directory
-    self._run_command("mkdir " + working_directory)
+    self._run_command("rm -rf " + quote(working_directory))
+    self._run_command("mkdir " + quote(working_directory))
 
     self.ssh.close()
     self.ssh_closed = True
@@ -113,6 +108,7 @@ class SSHRunner(Runner):
       self.ssh = SSHClient()
       self.ssh.load_system_host_keys()
       self.ssh.connect(self.hostname, username=self.username)
+      self.ssh.get_transport().set_keepalive(30)
       self.ssh_closed = False
 
 
@@ -144,7 +140,11 @@ class SSHRunner(Runner):
       self.logger.critical(error_message)
       raise RuntimeError(error_message)
 
-    # self._cleanup(folder_name)
+    self._cleanup(folder_name)
+
+    # maybe this will help solving the getting stuck problem 
+    self.ssh.close()
+    self.ssh_closed = True
 
     try:
       return json.loads(json_result)
@@ -172,7 +172,7 @@ class SSHRunner(Runner):
       sftp.put(tar_filename, os.path.join(destination, os.path.basename(tar_filename)))
       os.remove(tar_filename)
 
-      self._run_command('cd ' + self.working_directory + '; tar xfz ' + tar_filename)
+      self._run_command('cd ' + self.working_directory + '; tar xfz ' + quote(tar_filename) + '; rm ' + quote(tar_filename))
     else:
       raise NotImplementedError("Can't SFTP put anything other than a folder or file yet.")
 
