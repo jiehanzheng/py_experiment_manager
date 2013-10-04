@@ -1,6 +1,6 @@
 from __future__ import print_function
 from .runner import Runner
-from paramiko import SSHClient, SFTPClient
+from paramiko import SSHClient, SFTPClient, AutoAddPolicy
 from pipes import quote
 import sys
 import os
@@ -33,7 +33,7 @@ class SSHRunner(Runner):
     # try connecting to it
     self.ssh = SSHClient()
     self.ssh.load_system_host_keys()
-    self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    self.ssh.set_missing_host_key_policy(AutoAddPolicy())
     self.ssh.connect(hostname, username=username)
     self.ssh_closed = False
 
