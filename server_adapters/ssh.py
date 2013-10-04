@@ -31,11 +31,7 @@ class SSHRunner(Runner):
     self.logger.info("Connecting to " + username + "@" + hostname + "...")
 
     # try connecting to it
-    self.ssh = SSHClient()
-    self.ssh.load_system_host_keys()
-    self.ssh.set_missing_host_key_policy(AutoAddPolicy())
-    self.ssh.connect(hostname, username=username)
-    self.ssh_closed = False
+    self._ensure_connected()
 
     _, home, _ = self.ssh.exec_command("pwd")
     home = home.read().strip()
@@ -108,6 +104,7 @@ class SSHRunner(Runner):
     if self.ssh_closed:
       self.ssh = SSHClient()
       self.ssh.load_system_host_keys()
+      self.ssh.set_missing_host_key_policy(AutoAddPolicy())
       self.ssh.connect(self.hostname, username=self.username)
       self.ssh.get_transport().set_keepalive(30)
       self.ssh_closed = False
