@@ -140,7 +140,7 @@ class SSHRunner(Runner):
 
     self._cleanup(folder_name)
 
-    # maybe this will help solving the getting stuck problem 
+    # XXX maybe this will help solving the getting stuck problem 
     self.ssh.close()
     self.ssh_closed = True
 
@@ -171,6 +171,8 @@ class SSHRunner(Runner):
       os.remove(tar_filename)
 
       _, stdout, stderr = self._run_command('cd ' + quote(self.working_directory) + ' && tar xvfz ' + quote(tar_filename) + ' && rm ' + quote(tar_filename))
+      self.logger.debug("tar STDOUT: " + stdout.read())
+      self.logger.debug("tar STDERR: " + stderr.read())
     else:
       raise NotImplementedError("Can't SFTP put anything other than a folder or file yet.")
 
