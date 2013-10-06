@@ -87,7 +87,7 @@ if __name__ == "__main__":
             num_neg = num_neg + 1
 
       this_svm_params = svm_params
-      this_svm_params = this_svm_params + ' -j ' + str(num_neg/num_pos)
+      # this_svm_params = this_svm_params + ' -j ' + str(num_neg/num_pos)
 
       queue.append(Task(filename, model_filename, prediction_filename, this_svm_params))
 
