@@ -140,7 +140,7 @@ if __name__ == "__main__":
       print("Folds folder already exists.", file=sys.stderr)
 
     # concat corresponding train & test files
-    with open(os.path.join(folder_name, 'train'), 'w') as train_file:
+    with open(os.path.join(folder_name, 'train.arff'), 'w') as train_file:
       with open(example_head_file_name) as header_file:
         for header_line in header_file:
           train_file.write(header_line)
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     # figure out our test set then copy test files
     test_folds = set(range(1, num_folds+1)) - set(train_folds)
-    with open(os.path.join(folder_name, 'test'), 'w') as test_file:
+    with open(os.path.join(folder_name, 'test.arff'), 'w') as test_file:
       with open(example_head_file_name) as header_file:
         for header_line in header_file:
           test_file.write(header_line)

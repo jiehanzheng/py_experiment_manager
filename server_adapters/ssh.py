@@ -44,22 +44,28 @@ class SSHRunner(Runner):
     if home + '/bin' not in path_string.split(':'):
       self.environment_variables.add(('PATH', self.bin_path + ':$PATH'))
 
-    # check if SVMLight is installed
-    _, svmlearn_location, _ = self._run_command("which svm_learn")
-    svmlearn_location = svmlearn_location.read().strip()
+    # add ~/jars/weka.jar to CLASSPATH if it is not already there
+    _, classpath, _ = self.ssh.exec_command("echo $CLASSPATH")
+    classpath_string = classpath.read()
+    if home + '/jars/weka.jar' not in classpath_string.split(':'):
+      self.environment_variables.add(('CLASSPATH', self.bin_path + ':$CLASSPATH'))
 
-    if len(svmlearn_location) > 0:
-      self.logger.info(hostname + " has SVMLight installed at " + svmlearn_location)
-    else:
-      self.logger.warning(hostname + " does not have SVMLight installed.  Attempting to install one...")
+    # TODO: check if Weka is installed
+    # _, svmlearn_location, _ = self._run_command("which svm_learn")
+    # svmlearn_location = svmlearn_location.read().strip()
+
+    # if len(svmlearn_location) > 0:
+    #   self.logger.info(hostname + " has SVMLight installed at " + svmlearn_location)
+    # else:
+    #   self.logger.warning(hostname + " does not have SVMLight installed.  Attempting to install one...")
       
-      self._run_command("mkdir -p " + self.bin_path)
+    #   self._run_command("mkdir -p " + self.bin_path)
 
-      # download and install SVMLight to home bin
-      self._run_command('wget -O ' + quote(os.path.join(self.bin_path, 'svm_learn')) + ' ' + 'https://static.jiehan.org/pub/svm_light/svm_learn')
-      self._run_command('wget -O ' + quote(os.path.join(self.bin_path, 'svm_classify')) + ' ' + 'https://static.jiehan.org/pub/svm_light/svm_classify')
-      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'svm_learn')))
-      self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'svm_classify')))
+    #   # download and install SVMLight to home bin
+    #   self._run_command('wget -O ' + quote(os.path.join(self.bin_path, 'svm_learn')) + ' ' + 'https://static.jiehan.org/pub/svm_light/svm_learn')
+    #   self._run_command('wget -O ' + quote(os.path.join(self.bin_path, 'svm_classify')) + ' ' + 'https://static.jiehan.org/pub/svm_light/svm_classify')
+    #   self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'svm_learn')))
+    #   self._run_command("chmod u+x " + quote(os.path.join(self.bin_path, 'svm_classify')))
 
     # check if our server-side script is installed
     install_helper_script = True
@@ -131,7 +137,7 @@ class SSHRunner(Runner):
 
     # the "python `which ...`" thing is a workaround to avoid using Columbia's old Python
     self.logger.info(self.hostname + " is training on " + folder_name + '...')
-    _, stdout, stderr = self._run_command('/bin/bash --login -c ' + quote('cd ' + self.working_directory + '/' + folder_name + '; ' + 'python `which train_and_test.py` ' + quote(svm_params)))
+    _, stdout, stderr = self._run_command('/bin/bash --login -c ' + quote('cd ' + self.working_directory + '/' + folder_name + '; ' + 'python `which train_and_test.py` ' + quote(svm_classifier) + quote(svm_params)))
 
     json_result = stdout.read()
 

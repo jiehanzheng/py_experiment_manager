@@ -1,7 +1,8 @@
 from ConfigParser import SafeConfigParser
 
 if __name__ == "__main__":
-  config = SafeConfigParser({'svm_C': '1.0',
+  config = SafeConfigParser({'svm_classifier': 'weka.classifiers.functions.SMO',
+                             'svm_C': '1.0',
                              'svm_L': '0.001',
                              'svm_P': '1.0E-12',
                              'svm_N': '0',

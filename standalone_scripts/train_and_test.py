@@ -8,139 +8,86 @@ from multiprocessing import Pool, cpu_count
 import subprocess
 from collections import namedtuple, defaultdict, Counter
 import json
+import re
 
 
-Task = namedtuple('Task', ['train_filename', 'model_filename', 'prediction_filename', 'svm_params'])
-SVMReport = namedtuple('SVMReport', ['prediction_filename', 'time_train', 'time_test'])
 DEV_NULL = open(os.devnull, 'w')
 
 
-def train_and_test(task):
-  if os.path.exists(task.prediction_filename):
-    return task.prediction_filename
+def get_text_section(outputdata, section_name):
+  section_content = ""
+  num_consecutive_blank_lines = 0
+  in_section = False
 
-  os.nice(19)
-  print("Training", task.model_filename, "with params", task.svm_params + "...", file=sys.stderr)
-  svm_learn_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["svm_learn", task.svm_params, task.train_filename, task.model_filename])], stdout=DEV_NULL, stderr=DEV_NULL)
-  atexit.register(_kill, svm_learn_process)
-  svm_learn_process.wait()
-  print("Testing using", task.model_filename + "...", file=sys.stderr)
-  svm_classify_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["svm_classify", 'test', task.model_filename, task.prediction_filename])], stdout=DEV_NULL, stderr=DEV_NULL)
-  atexit.register(_kill, svm_classify_process)
-  svm_classify_process.wait()
+  for output_line in outputdata.splitlines():
+    print(output_line)
 
-  return task.prediction_filename
+    if output_line.strip() == "=== " + section_name + " ===":
+      in_section = True
+      continue
+
+    if in_section and len(output_line.strip()) == 0:
+      num_consecutive_blank_lines += 1
+
+    if in_section and num_consecutive_blank_lines <= 2:
+      section_content += output_line + '\n'
+
+  return section_content
+
+
+valid_class_report_component = re.compile(r'(\d|\.)+')
+
+def is_class_report_line(report_line):
+  if len(report_line.strip()) == 0:
+    return False
+
+  report_line_components = report_line.split()
+  return all(valid_class_report_component.match(component) for component in report_line_components)
 
 
 def _kill(process):
-  print("Killing", str(process) + '...')
-  os.kill(process.pid)
-
-
-def count_for_f1(tp, fp, fn, tn, prediction_file, test_file, classes):
-  for prediction_line, test_line in zip(prediction_file, test_file):
-    actual_class = int(test_line.split(' ')[0])
-    prediction_class = int(prediction_line.strip())
-
-    # calculate tp, fp, fn, tn for each class
-    for eval_class in classes:
-      if actual_class == prediction_class:    # true
-        if actual_class == eval_class:          # positive
-          tp[eval_class] = tp[eval_class] + 1
-        else:                                   # negative
-          tn[eval_class] = tn[eval_class] + 1
-      else:                                   # false
-        if actual_class == eval_class:          # positive
-          fp[eval_class] = fp[eval_class] + 1
-        else:                                   # negative
-          fn[eval_class] = fn[eval_class] + 1
+  print("Killing", str(process) + '...', file=sys.stderr)
+  try:
+    os.kill(process.pid, 9)
+  except OSError:
+    pass
 
 
 if __name__ == "__main__":
   num_threads = cpu_count()
-  svm_params = sys.argv[1]
+  svm_classifier = sys.argv[1]
+  svm_params = sys.argv[2]
 
-  # find number of classes
-  classes = set()
-  with open('test') as test_file:
-    for test_line in test_file:
-      actual_class = int(test_line.split(' ')[0])
-      classes.add(actual_class)
+  os.nice(19)
 
-  # find all train files and train N models with them
-  queue = []
-  for filename in os.listdir('.'):
-    if filename.startswith('train') and len(filename) > len("train"):
-      model_filename = filename.replace('train', 'model', 1)
-      prediction_filename = filename.replace('train', 'prediction', 1)
+  # TODO: change to weka commands
+  print("Training", 'model.arff', "with params", svm_params + "...", file=sys.stderr)
+  svm_learn_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["java", '-Xmx4g', svm_classifier, svm_params, '-t', 'train.arff', '-d', 'model'])], stdout=DEV_NULL, stderr=DEV_NULL)
+  atexit.register(_kill, svm_learn_process)
+  svm_learn_process.wait()
 
-      # find -j param
-      num_pos = 0
-      num_neg = 0
-      with open(filename) as train_file:
-        for train_line in train_file:
-          klass = int(train_line.split(' ')[0])
+  # TODO: test and parse weka result tables
+  print("Testing using", 'model' + "...", file=sys.stderr)
+  svm_classify_process = subprocess.Popen(['/bin/bash', '-c', ' '.join(["java", '-Xmx4g', svm_classifier, '-i', '-l', 'model', '-T', 'test.arff'])], stdout=subprocess.PIPE, stderr=DEV_NULL)
+  atexit.register(_kill, svm_classify_process)
+  stdoutdata, stderrdata = svm_classify_process.communicate()
 
-          if klass == 1:
-            num_pos = num_pos + 1
-          else:
-            num_neg = num_neg + 1
+  report_section = get_text_section(stdoutdata, "Detailed Accuracy By Class")
 
-      this_svm_params = svm_params
-      # this_svm_params = this_svm_params + ' -j ' + str(num_neg/num_pos)
+  num_classes = 0
+  total_precision = 0.0
+  total_recall = 0.0
+  for report_line in report_section.splitlines():
+    if is_class_report_line(report_line):
+      components = report_line.split()
+      num_classes += 1
+      total_precision += float(components[2])
+      total_recall += float(components[3])
 
-      queue.append(Task(filename, model_filename, prediction_filename, this_svm_params))
+  precision = total_precision/num_classes
+  recall = total_recall/num_classes
+  f1 = 2*(precision*recall)/(precision+recall)
 
-  pool = Pool(processes=num_threads)
-  prediction_filenames = pool.map(train_and_test, queue)
-
-  # generate final prediction
-  prediction_files = dict()
-  for prediction_filename in prediction_filenames:
-    class_id = int(prediction_filename[len('prediction.class_'):])
-    prediction_files[class_id] = open(prediction_filename)
-
-  print(prediction_files, file=sys.stderr)
-
-  with open('prediction', 'w') as final_prediction_file:
-    while True:
-      class_lines = {class_id: prediction_file.readline().strip() for class_id, prediction_file in prediction_files.items()}
-
-      try:
-        max_key = max(class_lines.iterkeys(), key=lambda k: float(class_lines[k]))
-      except ValueError:  # happens when float('') -> we reached EOF
-        break
-      
-      max_score = float(class_lines[max_key])
-
-      # TODO: add a flag
-      # if max_score <= 0:
-      #   best_class = -1
-      # else:
-      #   best_class = max_key
-      best_class = max_key
-
-      final_prediction_file.write(str(best_class) + '\n')
-
-  for prediction_file in prediction_files.itervalues():
-    prediction_file.close()
-
-  # calculate f-measure and stuff
-  tp = Counter()
-  fp = Counter()
-  fn = Counter()
-  tn = Counter()
-  with open('prediction') as prediction_file, open('test') as test_file:
-    count_for_f1(tp=tp, fp=fp, fn=fn, tn=tn, prediction_file=prediction_file, test_file=test_file, classes=classes)
-
-  # calculate f-measure for each class
-  report = {}
-  for class_id in classes:
-    precision = tp[class_id]/(tp[class_id]+fp[class_id])
-    recall = tp[class_id]/(tp[class_id]+fn[class_id])
-    try:
-      report[class_id] = {'f1': 2*(precision*recall)/(precision+recall), 'precision': precision, 'recall': recall}
-    except ZeroDivisionError:
-      report[class_id] = {'f1': 0.0, 'precision': precision, 'recall': recall}
+  report = {'f1': f1, 'precision': precision, 'recall': recall}
 
   print(json.dumps(report), end='')
